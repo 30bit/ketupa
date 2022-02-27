@@ -94,7 +94,7 @@ fn extrema_test() {
 }
 
 impl Chord<usize> {
-    pub fn search<P: Polygon, L: Look<Scalar = P::Scalar>>(polygon: &P, look: &L) -> Self {
+    pub fn search_diameter<P: Polygon, L: Look<Scalar = P::Scalar>>(polygon: &P, look: &L) -> Self {
         let [leftmost, rightmost] = extrema(
             polygon.index_range(),
             |i| polygon.get_point(i),
