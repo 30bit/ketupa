@@ -23,7 +23,7 @@ fn main() {
             shape_layer_index: 3,
             shadow_layer_index: 7,
             color: color(235, 137, 52, 238),
-            // translation: vec2(-180.0, 65.0),
+            translation: vec2(-180.0, 65.0),
             points: vec![
                 vec2(-120.0, 25.0),
                 vec2(-45.0, 210.0),
@@ -64,9 +64,6 @@ fn main() {
         let look_cos_sin = -cursor.cos_sin;
         let cursor_angle = look_cos_sin.y.atan2(look_cos_sin.x);
         for (i, mut body) in bodies.iter_mut().enumerate() {
-            if i == 1 {
-                break;
-            }
             body.shadow_layer_index = i + 7;
             body.left_concavities_layer_index = i * 3 + 1;
             body.right_concavities_layer_index = body.left_concavities_layer_index + 1;
@@ -76,7 +73,7 @@ fn main() {
             let look = EitherLook::from_angle(cursor_angle, true, !cursor.is_stroked);
             let mat = Mat2::from_angle(body.current_rotation_angle());
             let polygon = SliceMapPolygon::new(&body.points, |p| (mat * p).into());
-            let diameter = Chord::search(&polygon, &look);
+            let diameter = Chord::search_diameter(&polygon, &look);
             body.draw_shadow(
                 &mut st,
                 look.wrap_range(diameter.leftmost..diameter.rightmost, polygon.index_range()),
