@@ -119,14 +119,16 @@ pub trait Look {
     type Scalar: Num;
     type WrapRange: Iterator<Item = usize>;
 
-    fn is_left_to_right(&self, first: Point<Self::Scalar>, second: Point<Self::Scalar>) -> bool;
+    fn are_left_and_right(&self, first: Point<Self::Scalar>, second: Point<Self::Scalar>) -> bool;
 
-    fn is_clockwise_angle(
+    fn are_clockwise(
         &self,
         a: Point<Self::Scalar>,
         b: Point<Self::Scalar>,
         c: Point<Self::Scalar>,
     ) -> bool;
+
+    fn are_prev_and_next(&self, first: usize, second: usize) -> bool;
 
     fn wrap_next(&self, index: usize, full: Range<usize>) -> usize;
 
@@ -135,13 +137,13 @@ pub trait Look {
     fn wrap_range(&self, range: Range<usize>, full: Range<usize>) -> Self::WrapRange;
 }
 
-fn is_left_to_right<T: Num>(cot: T, first: Point<T>, second: Point<T>) -> bool {
+fn are_left_and_right<T: Num>(cot: T, first: Point<T>, second: Point<T>) -> bool {
     let lhs = second.x - first.x;
     let rhs = cot * (second.y - first.y);
     lhs > rhs
 }
 
-macro_rules! is_clockwise_angle {
+macro_rules! are_clockwise {
     ($lt_pi:expr => $a:expr, $b:expr, $c:expr) => {{
         let lhs = ($b.x - $a.x) * ($c.y - $b.y);
         let rhs = ($c.x - $b.x) * ($b.y - $a.y);
@@ -168,6 +170,16 @@ fn wrap_backward(index: usize, full: Range<usize>) -> usize {
     } else {
         full.end - 1
     }
+}
+
+macro_rules! are_prev_and_next {
+    ($rev:expr => $first:expr, $second:expr) => {
+        if $rev {
+            $second < $first
+        } else {
+            $first < $second
+        }
+    };
 }
 
 macro_rules! wrap_next {
@@ -389,13 +401,17 @@ macro_rules! impl_const_look {
             type WrapRange = $iter;
 
             #[inline]
-            fn is_left_to_right(&self, first: Point<T>, second: Point<T>) -> bool {
-                is_left_to_right(self.cot, first, second)
+            fn are_left_and_right(&self, first: Point<T>, second: Point<T>) -> bool {
+                are_left_and_right(self.cot, first, second)
             }
 
             #[inline]
-            fn is_clockwise_angle(&self, a: Point<T>, b: Point<T>, c: Point<T>) -> bool {
-                is_clockwise_angle!($lt_pi => a, b, c)
+            fn are_clockwise(&self, a: Point<T>, b: Point<T>, c: Point<T>) -> bool {
+                are_clockwise!($lt_pi => a, b, c)
+            }
+
+            fn are_prev_and_next(&self, first: usize, second: usize) -> bool {
+                are_prev_and_next!($is_clockwise ^ $is_exterior ^ $lt_pi => first, second)
             }
 
             fn wrap_next(&self, index: usize, full: Range<usize>) -> usize {
@@ -495,13 +511,17 @@ impl<T: Num> Look for EitherLook<T> {
     type WrapRange = WrapEitherRange;
 
     #[inline]
-    fn is_left_to_right(&self, first: Point<T>, second: Point<T>) -> bool {
-        is_left_to_right(self.cot, first, second)
+    fn are_left_and_right(&self, first: Point<T>, second: Point<T>) -> bool {
+        are_left_and_right(self.cot, first, second)
     }
 
     #[inline]
-    fn is_clockwise_angle(&self, a: Point<T>, b: Point<T>, c: Point<T>) -> bool {
-        is_clockwise_angle!(self.lt_pi => a, b, c)
+    fn are_clockwise(&self, a: Point<T>, b: Point<T>, c: Point<T>) -> bool {
+        are_clockwise!(self.lt_pi => a, b, c)
+    }
+
+    fn are_prev_and_next(&self, first: usize, second: usize) -> bool {
+        are_prev_and_next!(self.rev => first, second)
     }
 
     fn wrap_next(&self, index: usize, full: Range<usize>) -> usize {
@@ -527,7 +547,7 @@ fn either_look_test() {
     let polygon = SliceMapPolygon::new(&points, Into::into);
     for angle in [179, 180, 181] {
         let look = EitherLook::from_angle((angle as f32).to_radians(), true, true);
-        assert!(look.is_left_to_right(polygon.get_point(2), polygon.get_point(3)));
+        assert!(look.are_left_and_right(polygon.get_point(2), polygon.get_point(3)));
         let mut iter = look.wrap_range(2..3, polygon.index_range());
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(1));
