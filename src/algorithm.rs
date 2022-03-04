@@ -1,8 +1,11 @@
 use {
-    crate::data::{Look, Point, Polygon},
+    crate::{
+        data::{Look, Point, Polygon},
+        utils::extrema,
+    },
     std::{
         mem::{replace, swap},
-        ops::{Range, RangeInclusive},
+        ops::RangeInclusive,
     },
 };
 
@@ -34,71 +37,12 @@ impl<I> From<Chord<I>> for RangeInclusive<I> {
     }
 }
 
-#[allow(clippy::eval_order_dependence)]
-fn extrema<T>(
-    Range { mut start, end }: Range<usize>,
-    mut value: impl FnMut(usize) -> T,
-    mut less: impl FnMut(&T, &T) -> bool,
-) -> [usize; 2] {
-    macro_rules! next {
-        () => {{
-            let index = start;
-            start += 1;
-            (index, value(index))
-        }};
-    }
-    if start + 1 >= end {
-        return [start, end];
-    }
-    let [mut l, mut r] = [next!(), next!()];
-    if less(&r.1, &l.1) {
-        swap(&mut l, &mut r);
-    }
-    while start != end {
-        let first = next!();
-        if start != end {
-            let second = next!();
-            if less(&first.1, &second.1) {
-                if less(&first.1, &l.1) {
-                    l = first
-                }
-                if less(&r.1, &second.1) {
-                    r = second
-                }
-            } else {
-                if less(&second.1, &l.1) {
-                    l = second
-                }
-                if less(&r.1, &first.1) {
-                    r = first
-                }
-            }
-        } else {
-            if less(&first.1, &l.1) {
-                l = first
-            } else if less(&r.1, &first.1) {
-                r = first
-            }
-            break;
-        }
-    }
-    [l.0, r.0]
-}
-
-#[test]
-fn extrema_test() {
-    assert_eq!(extrema(0..4, |i| [0, 1, 2, 3][i], |a, b| a < b), [0, 3]);
-    assert_eq!(extrema(0..4, |i| [0, 3, 2, 1][i], |a, b| a < b), [0, 1]);
-    assert_eq!(extrema(0..4, |i| [3, 0, 2, 1][i], |a, b| a < b), [1, 0]);
-    assert_eq!(extrema(0..4, |i| [2, 1, 3, 0][i], |a, b| a < b), [3, 2]);
-}
-
 impl Chord<usize> {
     pub fn search_diameter<P: Polygon, L: Look<Scalar = P::Scalar>>(polygon: &P, look: &L) -> Self {
         let [leftmost, rightmost] = extrema(
             polygon.index_range(),
             |i| polygon.get_point(i),
-            |a, b| look.is_left_to_right(*a, *b),
+            |a, b| look.are_left_and_right(*a, *b),
         );
         Chord::new(leftmost, rightmost)
     }
@@ -259,8 +203,8 @@ impl<'a, P: Polygon, L: Look<Scalar = P::Scalar>> Iterator for EventIter<'a, P, 
             &mut self.wrap_range,
             &mut self.left,
             &mut self.right,
-            |a, b, c| self.look.is_clockwise_angle(a, b, c),
-            &|a, b| self.look.is_left_to_right(a, b),
+            |a, b, c| self.look.are_clockwise(a, b, c),
+            &|a, b| self.look.are_left_and_right(a, b),
         ) {
             TurnAndSurpass::Finish if self.exhausted => return None,
             TurnAndSurpass::Finish => {
@@ -285,8 +229,8 @@ impl<'a, P: Polygon, L: Look<Scalar = P::Scalar>> Iterator for EventIter<'a, P, 
                 &mut self.wrap_range,
                 &mut self.right,
                 &mut self.left,
-                |a, b, c| self.look.is_clockwise_angle(c, b, a),
-                &|a, b| self.look.is_left_to_right(b, a),
+                |a, b, c| self.look.are_clockwise(c, b, a),
+                &|a, b| self.look.are_left_and_right(b, a),
             ) {
                 TurnAndSurpass::AndSurpass { .. } => continue,
                 TurnAndSurpass::Finish => {
@@ -310,4 +254,17 @@ impl<'a, P: Polygon, L: Look<Scalar = P::Scalar>> Iterator for EventIter<'a, P, 
             (1, Some(wrap_range_hint / 2))
         }
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Buffer<I, J = I> {
+    pub partially_visible_chords: Vec<Chord<I>>,
+    pub concavity_direction_extrema: Vec<J>,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Slice<'a, I, J = I> {
+    pub partially_visible_chords: &'a [Chord<I>],
+    pub concavity_direction_extrema: &'a [J],
+    pub diameter: Chord<I>,
 }
